@@ -76,7 +76,9 @@ Ask the user for:
 
 1. Collection paths for **content** (e.g. `products`, `listings`)
 2. Which fields to sync (include the Storage download URL field if media)
-3. How to build Galya `url` — prefer **Storage HTTPS download URL** on the doc for media
+3. How to build Galya `url`:
+   - **Media:** publicly downloadable HTTPS URL (Firebase Storage download URL with token, or public CDN)
+   - **Text:** stable HTTPS URI used as **dedup key only** (product page, or synthetic `https://app.example.com/items/{{id}}`) — Galya need not fetch it if `skipUrlFetch` is true
 4. **Required: Galya `domain`** — must match the catalog taste space (wrong domain = wrong embeddings / landscapes). Confirm with the user; do not guess silently.
 5. Galya **type** (`text` / `image` / `video` / `audio`)
 6. Include/exclude rules
@@ -98,30 +100,65 @@ Aliases: `ecommerce` → shopping, `linkedin` → professional, `ux` → uiux.
 - Use one domain per collection when catalogs differ (e.g. products → `shopping`, stays → `travel`)
 - Do not invent domain strings outside the list above
 
-### Content sync (Storage URL on Firestore → Galya media)
+### Media content (image / video / audio)
+
+Galya **downloads bytes from `url`**. That URL must be **publicly reachable by Galya’s servers** (HTTPS GET).
+
+Use Firestore fields that already store a downloadable URL:
+
+- Firebase Storage **token download URL**  
+  `https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<path>?alt=media&token=<token>`
+- Or a public CDN / signed URL that remains valid long enough for indexing
 
 ```json
 {
-  "version": 1,
-  "defaults": { "domain": "shopping", "idField": "galyaEntityId", "writeBack": true },
-  "collections": [
-    {
-      "path": "products",
-      "domain": "shopping",
-      "type": "image",
-      "fields": ["title", "description", "imageUrl", "status"],
-      "url": "{{imageUrl}}",
-      "content": "{{title}}\n{{description}}",
-      "skipUrlFetch": false,
-      "rules": { "includeWhen": { "status": "published" } }
-    }
-  ]
+  "path": "products",
+  "domain": "shopping",
+  "type": "image",
+  "fields": ["title", "description", "imageUrl", "status"],
+  "url": "{{imageUrl}}",
+  "content": "{{title}}\n{{description}}",
+  "skipUrlFetch": false,
+  "rules": { "includeWhen": { "status": "published" } }
 }
 ```
 
-- `imageUrl` = public/tokenized Firebase Storage download URL (or CDN URL Galya can GET)
-- For media types, keep `skipUrlFetch` false so Galya can fetch bytes
-- For text catalogs: `type: "text"`, stable page URL, `skipUrlFetch: true` + `content` template
+**Checklist for agents / developers:**
+
+- Confirm Storage rules or tokens allow unauthenticated GET (or a durable signed URL)
+- Do **not** use `gs://` paths, private bucket paths without tokens, or app-only auth URLs
+- Keep `skipUrlFetch: false` (default for media) so Galya can fetch
+- Optional `content` = caption / notes for the model, not a substitute for the media URL
+
+### Text content (no media file to download)
+
+Galya still requires a `url` field as the **stable dedup key**, but you can skip fetching the page and embed **inline text** from Firestore fields.
+
+Procedure:
+
+1. Set `type: "text"`
+2. Set `url` to a **stable unique HTTPS URI** per doc (canonical page, or synthetic e.g. `https://yourapp.com/items/{{id}}`)
+3. Set `skipUrlFetch: true`
+4. Set `content` to a mustache template over the text fields Galya should embed
+
+```json
+{
+  "path": "posts",
+  "domain": "conversation",
+  "type": "text",
+  "fields": ["title", "body", "status"],
+  "url": "https://app.example.com/posts/{{id}}",
+  "content": "{{title}}\n\n{{body}}",
+  "skipUrlFetch": true,
+  "rules": { "includeWhen": { "status": "published" } }
+}
+```
+
+Notes:
+
+- Inline `content` is what gets embedded when `skipUrlFetch` is true — make it rich enough
+- The synthetic/page `url` should stay stable across updates so reindex dedups correctly
+- If you also want Galya to scrape a real public webpage, set `url` to that page and `skipUrlFetch: false` (no need for a large `content` body)
 
 ### Users (not collection sync)
 
@@ -159,9 +196,9 @@ npm run build && firebase deploy --only functions
 
 ## Do / Don’t
 
-**Do:** sync content collections; set the correct **`domain`** per collection; put Storage URLs on those docs for media; link users via callables after write-back.
+**Do:** sync content collections; set the correct **`domain`**; for media use **publicly downloadable** HTTPS URLs; for text use `skipUrlFetch: true` + rich `content`; link users via callables after write-back.
 
-**Don’t:** omit or invent `domain`; use Storage object triggers as the default content path; expect profile `users` to become Galya users automatically; duplicate assets via both `collections[]` and `storage[]`.
+**Don’t:** point media `url` at private/`gs://` paths; omit `domain`; use Storage object triggers as the default content path; expect profile `users` to become Galya users automatically.
 
 ## Repo
 

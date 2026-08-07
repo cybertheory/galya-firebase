@@ -4,7 +4,9 @@
 
 Clone this repo into your Firebase Functions project, name the collections and fields you care about, and every write becomes taste-ready **content** — built on [Galya](https://galya.io) content domains.
 
-For images and other media, put a **Firebase Storage download URL** on the Firestore document and sync that field as Galya `url` (preferred). Optional raw Storage path watches exist for orphan uploads only.
+For images and other media, put a **publicly downloadable** Firebase Storage (or CDN) HTTPS URL on the Firestore document and sync that field as Galya `url`. Galya’s indexer must be able to GET it.
+
+For **text-only** rows (no file to download): still provide a stable `url` as the dedup key, set `type: "text"`, `skipUrlFetch: true`, and put the embeddable body in the `content` template from Firestore fields.
 
 ```
 Firestore doc (incl. Storage URL fields)  ──►  Cloud Function  ──►  Galya content
@@ -221,7 +223,29 @@ Snake_case aliases (`relative_to_entity_id`, `entity_id`, …) are accepted wher
 }
 ```
 
-Here `imageUrl` is a **Firebase Storage download URL** (or CDN URL) stored on the Firestore product doc. That is the preferred media sync path.
+Here `imageUrl` must be a **publicly downloadable** HTTPS URL (Firebase Storage download URL with token, or public CDN). Galya GETs that URL to enrich media — private/`gs://` paths will fail.
+
+### Text-only content (no file download)
+
+`url` is still required as the **dedup key**, but Galya does not need to fetch a page:
+
+1. `type: "text"`
+2. Stable unique HTTPS `url` (canonical page or synthetic `https://yourapp.com/items/{{id}}`)
+3. `skipUrlFetch: true`
+4. `content` template from Firestore text fields (this is what gets embedded)
+
+```json
+{
+  "path": "posts",
+  "domain": "conversation",
+  "type": "text",
+  "fields": ["title", "body", "status"],
+  "url": "https://app.example.com/posts/{{id}}",
+  "content": "{{title}}\n\n{{body}}",
+  "skipUrlFetch": true,
+  "rules": { "includeWhen": { "status": "published" } }
+}
+```
 
 ### Collections
 
@@ -229,14 +253,14 @@ Here `imageUrl` is a **Firebase Storage download URL** (or CDN URL) stored on th
 |-------|-------------|
 | `path` | Firestore collection or `users/{uid}/listings`-style path |
 | `fields` | Allowlist (omit = all top-level fields). Unrelated field updates are skipped |
-| `url` | Mustache template → Galya **dedup key** (required HTTPS URI). For media, use the Storage download URL field |
-| `content` | Mustache template → inline text / captions for embeddings |
+| `url` | Mustache → Galya **dedup key** (required HTTPS URI). Media: publicly downloadable Storage/CDN URL. Text: stable page or synthetic URI |
+| `content` | Mustache → inline text / captions. **Required in practice for text + `skipUrlFetch`** |
 | `domain` | **Required** taste domain (or set `defaults.domain`). Wrong domain misroutes embeddings — see Domains below |
 | `type` | `text` \| `image` \| `video` \| `audio` |
 | `ref` | Optional correlation token echoed on search/rerank |
 | `idField` | Firestore field for Galya entity id (**default `galyaEntityId`**). Read on sync + **written back** after upsert. Set `null` to disable |
 | `writeBack` | Write `idField` + `galyaSyncedAt` onto the source doc (default `true` when `idField` enabled) |
-| `skipUrlFetch` | Default true for text+content; keep **false** for media so Galya can GET `url` |
+| `skipUrlFetch` | **`true` for text** (embed `content` only). **`false` for media** so Galya can GET `url` |
 | `rules.includeWhen` | Shallow equality — all keys must match |
 | `rules.excludeWhen` | Shallow equality — match → do not sync (deletes prior Galya entity if mapped) |
 
@@ -334,6 +358,8 @@ galya-firebase/
 |---------|-----|
 | `missing galya.sync.json` | Copy the example and redeploy |
 | Empty `url` errors | Fix the `url` template — Galya requires a non-empty URI |
+| Media index fails / empty enrich | Ensure `url` is **publicly downloadable** HTTPS (Storage token URL or CDN), not `gs://` / private |
+| Text embeds look empty | Set `skipUrlFetch: true` and a rich `content` template from Firestore fields |
 | Deletes don’t remove Galya content | Ensure mapping exists (doc was synced at least once); check Functions logs for `deleteEntity` |
 | Auth error on backfill | Call while signed in; grant `cloudfunctions.functions.invoke` to admins |
 | Path change not triggering | Redeploy after editing `collections[].path` |
