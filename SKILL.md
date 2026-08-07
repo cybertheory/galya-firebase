@@ -1,27 +1,40 @@
 ---
 name: galya-firebase
 description: >-
-  Sync Firestore collections and Firebase Storage into Galya taste catalogs.
-  Use when the user mentions Firebase, Firestore, Storage sync, Galya content
+  Sync Firestore collections into Galya taste catalogs (content). Prefer
+  Firestore docs that hold Firebase Storage download URLs as Galya media url.
+  Use when the user mentions Firebase, Firestore, Storage URLs, Galya content
   domains, clone galya-firebase, Firebase Functions sync, or indexing
-  Firebase data into Galya.
+  Firebase data into Galya. Does not auto-sync Galya user entities — those
+  are created/linked via callables after content ingest.
 ---
 
 # Galya Firebase Sync
 
-Clone-into-project Cloud Functions that map Firestore documents and Storage objects to Galya **content** (`url`, `type`, `domain`, `content`) via the Galya HTTP API (`src/galyaClient.ts`).
+Clone-into-project Cloud Functions that map **Firestore documents → Galya content** (`url`, `type`, `domain`, `content`) via the Galya HTTP API (`src/galyaClient.ts`).
+
+**Primary pattern:** sync catalog rows from Firestore. For images/videos/audio, store a **Firebase Storage download URL** (or CDN URL) on the Firestore doc and point `url` / `type` at that field — do **not** treat Storage object triggers as the main content path.
+
+## What is / isn’t covered
+
+| Goal | Covered? | How |
+|------|----------|-----|
+| Sync **content** (products, listings, posts, media) | **Yes** | `collections[]` in `galya.sync.json` → `createEntity` content upsert |
+| Media via **Storage URLs on Firestore docs** | **Yes (preferred)** | Doc field like `imageUrl` / `coverUrl` → template `url: "{{imageUrl}}"`, `type: "image"` |
+| Sync **Galya user** entities from a `users` collection | **No (automatic)** | Create users with `galyaCreateEntity` (`type: "user"`, `name`) then `galyaLinkEntity` after content has `galyaEntityId` |
+| Raw Storage bucket watch (`storage[]` pathPrefix) | Optional / advanced | Only for objects with **no** Firestore row; prefer Firestore + URL instead |
 
 ## When to use
 
-- User wants Firestore → Galya sync from Firebase Cloud Functions
-- User names collections/fields to index into a Galya domain
-- User wants Storage images/videos as Galya media content
+- User wants Firestore → Galya **content** sync from Cloud Functions
+- User names collections/fields (and Storage URL fields) to index into a domain
+- User asks how to sync images — answer: put download URLs on the Firestore doc and sync that collection
 - User asks to wire `galya.sync.json`, backfill, or Firebase Functions for Galya
+- User asks about **users** — explain create/link via callables; sync does not mean-pool parents
 
 ## Install into a Firebase project
 
 ```bash
-# Prefer clone as the functions package
 git clone https://github.com/cybertheory/galya-firebase.git functions
 cd functions && npm install
 cp galya.sync.example.json galya.sync.json
@@ -36,159 +49,101 @@ Code binds `GALYA_API_KEY` with `defineSecret("GALYA_API_KEY")` (`src/params.ts`
 ### Production (agent must do this for the user)
 
 ```bash
-# From Firebase project root (parent of functions/)
 firebase login
 firebase use <project-id>
-
-# Paste galya_wsk_… from Galya Dashboard → workspace → API keys → Secret keys
 firebase functions:secrets:set GALYA_API_KEY
-
-# Optional string params via functions/.env.<PROJECT_ID> (do not put API key here):
-#   GALYA_WORKSPACE_ID=ws_…     # only for galya_sk_ account secrets
-#   GALYA_BASE_URL=https://api.galya.io/v1
-
 cd functions && npm install && npm run build
 cd .. && firebase deploy --only functions
-# Grant access to secret GALYA_API_KEY when the CLI asks
 ```
 
-Verify:
-
-```bash
-firebase functions:secrets:access GALYA_API_KEY
-```
-
-Rotate: `firebase functions:secrets:set GALYA_API_KEY` then redeploy.
+Verify: `firebase functions:secrets:access GALYA_API_KEY`
 
 ### Local emulator
 
 ```bash
 cd functions
-cp .env.example .env   # set GALYA_API_KEY=galya_wsk_…
+cp .env.example .env
 export $(grep -v '^#' .env | xargs)
 npm run build
 firebase emulators:start --only functions
 ```
 
-### Key rules
-
-- Prefer **`galya_wsk_…`** (workspace secret). Never publishable keys.
-- **`galya_sk_…`** requires `GALYA_WORKSPACE_ID`.
-- Never commit secrets; keep `GALYA_API_KEY` in Secret Manager for prod.
-
-Never invent API shapes — use the in-repo `GalyaClient` (`src/galyaClient.ts`) which matches Galya’s content API (`createEntity`, `createEntityBatch`, `waitForEntityJob`, `deleteEntity`). Optionally swap to `@galya/agents` when you already depend on it.
+Prefer **`galya_wsk_…`**. Account secrets (`galya_sk_…`) need `GALYA_WORKSPACE_ID`. Never commit keys.
 
 ## Write `galya.sync.json`
 
 Ask the user for:
 
-1. Collection paths (e.g. `products`, `users/{uid}/listings`)
-2. Which fields to sync
-3. How to build a **stable HTTPS `url`** (dedup key) — product page or image CDN
-4. Galya **domain** per collection
-5. Include/exclude rules (e.g. only `status: published`)
+1. Collection paths for **content** (e.g. `products`, `listings`)
+2. Which fields to sync (include the Storage download URL field if media)
+3. How to build Galya `url` — prefer **Storage HTTPS download URL** on the doc for media
+4. Galya **domain** + **type** (`text` / `image` / `video` / `audio`)
+5. Include/exclude rules
 
-Minimal example:
+### Content sync (Storage URL on Firestore → Galya media)
 
 ```json
 {
   "version": 1,
-  "defaults": { "domain": "shopping", "type": "text", "skipUrlFetch": true },
+  "defaults": { "domain": "shopping", "idField": "galyaEntityId", "writeBack": true },
   "collections": [
     {
       "path": "products",
+      "domain": "shopping",
+      "type": "image",
       "fields": ["title", "description", "imageUrl", "status"],
-      "url": "https://shop.example.com/p/{{id}}",
+      "url": "{{imageUrl}}",
       "content": "{{title}}\n{{description}}",
+      "skipUrlFetch": false,
       "rules": { "includeWhen": { "status": "published" } }
     }
   ]
 }
 ```
 
+- `imageUrl` = public/tokenized Firebase Storage download URL (or CDN URL Galya can GET)
+- For media types, keep `skipUrlFetch` false so Galya can fetch bytes
+- For text catalogs: `type: "text"`, stable page URL, `skipUrlFetch: true` + `content` template
+
+### Users (not collection sync)
+
+Do **not** map Firestore profile `users` into content unless those docs are catalog items.
+
+Attach content to a Galya user:
+
+1. `galyaCreateEntity` → `{ type: "user", name: "…" }`
+2. After sync write-back → `galyaLinkEntity` `{ parent_id: userId, entity_id: doc.galyaEntityId }`
+
 ### Domains
 
-`uiux` · `professional` · `shopping` · `fashion` · `restaurants` · `travel` · `hospitality` · `conversation`  
-Aliases: `ecommerce`→shopping, `linkedin`→professional.
+`uiux` · `professional` · `shopping` · `fashion` · `restaurants` · `travel` · `hospitality` · `conversation`
 
-### Content types
+### Optional: raw Storage object watch
 
-`text` | `image` | `video` | `audio`
+Only if uploads have **no** Firestore document. Prefer Firestore + URL. Avoid enabling `storage[]` and `collections[]` for the same assets (duplicate content).
 
-### Rules (v1)
-
-- `includeWhen`: shallow equality, all keys must match
-- `excludeWhen`: shallow equality → skip sync; if previously synced, `deleteEntity` + clear write-back fields
-- Templates: `{{field}}`, `{{a.b}}`, plus `{{id}}`, `{{path}}`
-- **`idField`** (default `galyaEntityId`): read for in-place reindex; **written back** after upsert with `galyaSyncedAt`. Set `idField: null` or `writeBack: false` to disable.
-
-### Storage block
-
-```json
-"storage": [{
-  "pathPrefix": "catalog/images/",
-  "domain": "fashion",
-  "type": "image",
-  "url": "downloadUrl",
-  "rules": { "contentTypes": ["image/jpeg", "image/png", "image/webp"] }
-}]
-```
-
-## Deploy
+## Deploy / backfill
 
 ```bash
-npm run build
-firebase deploy --only functions
+npm run build && firebase deploy --only functions
+# Callable (Auth required):
+# galyaBackfill { "paths": ["products"], "batchSize": 50 }
 ```
 
-**Redeploy after changing `path` or `pathPrefix`** — triggers are bound at deploy time from config.
+## Callables (Auth required)
 
-## Backfill
-
-Callable `galyaBackfill` (Firebase Auth required):
-
-```json
-{ "paths": ["products"], "batchSize": 50 }
-```
-
-## Galya ops callables
-
-All require Firebase Auth. Use these so clients never hold the workspace secret:
-
-| Callable | Data |
-|----------|------|
-| `galyaGauge` | `{ response, followup, prompt? }` |
-| `galyaSearch` | `{ relativeToEntityId, inTermsOfEntityType, query }` |
-| `galyaRerank` | `{ relativeToEntityId, inTermsOfEntityType, candidates, history?, domain? }` |
-| `galyaRecommend` | `{ relativeToEntityId, inTermsOfEntityType, candidates, history, domain? }` |
-| `galyaAsk` / `galyaExplain` | `{ relativeToEntityId, inTermsOfEntityType, query, … }` |
-| `galyaCreateEntity` | content upsert or parent + `linked_content` |
-| `galyaCreateEntityBatch` | `{ content[], ids? }` |
-| `galyaGetEntity` / `galyaDeleteEntity` | `{ entity_id }` |
-| `galyaLinkEntity` | `{ parent_id, entity_id, rel?, weight? }` |
-| `galyaGetEntityJob` | `{ job_id }` |
-
-## Mapping store
-
-Synced sources are tracked in Firestore `_galya_sync/{hash}` (`sourceKey` → `entityId`). Do not treat this as app data; it enables deletes.
+| Callable | Use |
+|----------|-----|
+| `galyaCreateEntity` | Content upsert **or** `{ type: "user", name }` |
+| `galyaLinkEntity` | Link content → user after sync |
+| `galyaCreateEntityBatch` / `galyaGetEntity` / `galyaDeleteEntity` | Batch / CRUD |
+| `galyaSearch` / `galyaRerank` / `galyaRecommend` / `galyaAsk` / `galyaExplain` / `galyaGauge` | Taste / language ops |
 
 ## Do / Don’t
 
-**Do**
+**Do:** sync content collections; put Storage URLs on those docs for media; link users via callables after write-back.
 
-- Prefer stable public HTTPS URLs for Galya `url`
-- Rely on write-back: after sync, docs get `galyaEntityId` (and `galyaSyncedAt`) for stable in-place reindex
-- Use workspace secrets (`galya_wsk_`)
-- Set `skipUrlFetch: true` when providing enough inline `content` for text
-- Align catalog URLs with client signal capture (`data-galya-id`) when personalizing
-
-**Don’t**
-
-- Invent Galya REST payloads — use `src/galyaClient.ts` (or `@galya/agents`)
-- Commit API keys
-- Put `galyaEntityId` in your `fields` allowlist unless you intentionally want edits to that field to re-trigger sync (write-back-only updates are ignored either way)
-- Expect parent `linked_content` / user mean-pool from this sync (do that separately after ingest)
-- Use deep query DSLs — only shallow `includeWhen` / `excludeWhen` in v1
+**Don’t:** use Storage object triggers as the default content path; expect profile `users` to become Galya users automatically; duplicate assets via both `collections[]` and `storage[]`.
 
 ## Repo
 

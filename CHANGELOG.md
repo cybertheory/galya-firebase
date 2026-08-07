@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2 — 2026-08-07
+
+- Clarify skill/README: content sync from Firestore; media via Storage URLs on docs; users via callables (not auto-sync)
+
 ## 1.1.1 — 2026-08-07
 
 - Expand README + SKILL with full Firebase Secret Manager setup for `GALYA_API_KEY`

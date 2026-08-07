@@ -2,9 +2,7 @@
   "version": 1,
   "defaults": {
     "domain": "shopping",
-    "type": "text",
     "batchSize": 50,
-    "skipUrlFetch": true,
     "idField": "galyaEntityId",
     "writeBack": true
   },
@@ -12,39 +10,27 @@
     {
       "path": "products",
       "domain": "shopping",
-      "type": "text",
+      "type": "image",
       "fields": ["title", "description", "imageUrl", "category", "status", "draft"],
       "url": "{{imageUrl}}",
       "content": "{{title}}\n{{description}}\nCategory: {{category}}",
       "ref": "{{id}}",
+      "skipUrlFetch": false,
       "rules": {
         "includeWhen": { "status": "published" },
         "excludeWhen": { "draft": true }
       }
     },
     {
-      "path": "users/{uid}/listings",
+      "path": "listings",
       "domain": "travel",
       "type": "text",
       "fields": ["title", "body", "coverUrl", "visible"],
-      "url": "{{coverUrl}}",
-      "content": "{{title}}\n{{body}}",
+      "url": "https://example.com/listings/{{id}}",
+      "content": "{{title}}\n{{body}}\nCover: {{coverUrl}}",
+      "skipUrlFetch": true,
       "rules": {
         "includeWhen": { "visible": true }
-      }
-    }
-  ],
-  "storage": [
-    {
-      "pathPrefix": "catalog/images/",
-      "domain": "fashion",
-      "type": "image",
-      "url": "downloadUrl",
-      "contentFromMetadata": ["customMetadata.caption"],
-      "writeBack": true,
-      "rules": {
-        "contentTypes": ["image/jpeg", "image/png", "image/webp"],
-        "minSizeBytes": 1024
       }
     }
   ]

@@ -1,15 +1,16 @@
 # Galya Firebase Sync
 
-**Sync Firestore + Storage into Galya taste catalogs.**
+**Sync Firestore into Galya taste catalogs.**
 
-Clone this repo into your Firebase Functions project, name the collections and fields you care about, and every write becomes taste-ready content — built on [Galya](https://galya.io) content domains.
+Clone this repo into your Firebase Functions project, name the collections and fields you care about, and every write becomes taste-ready **content** — built on [Galya](https://galya.io) content domains.
+
+For images and other media, put a **Firebase Storage download URL** on the Firestore document and sync that field as Galya `url` (preferred). Optional raw Storage path watches exist for orphan uploads only.
 
 ```
-Firestore write  ──►  Cloud Function  ──►  Galya POST /v1/entity
-Storage upload ──►  Cloud Function  ──►  Galya content (image/video/…)
+Firestore doc (incl. Storage URL fields)  ──►  Cloud Function  ──►  Galya content
 ```
 
-One clone. **As many collections as you need.** Declarative rules. Optional Storage prefixes. Full backfill when you’re ready.
+One clone. **As many collections as you need.** Declarative rules. Media via Storage URLs on Firestore docs. Full backfill when you’re ready.
 
 ---
 
@@ -19,7 +20,7 @@ One clone. **As many collections as you need.** Declarative rules. Optional Stor
 |---|---|---|
 | Destination | Keyword / vector index | **Taste catalog** (`domain` + embeddings) |
 | Collections | Often one install per collection | **Many collections in one `galya.sync.json`** |
-| Media | URLs as strings | **Storage → image / video / audio content** |
+| Media | Separate pipelines | **Firestore fields holding Storage/CDN URLs** → `type: image\|video\|audio` |
 | API | Proprietary index objects | Galya primitives: `url`, `type`, `domain`, `content` |
 
 Under the hood we call the same Galya content API as [`@galya/agents`](https://www.npmjs.com/package/@galya/agents) (`POST /v1/entity`, batch, delete) via a small in-repo HTTP client so this clone template stays deployable without extra packages.
@@ -197,40 +198,30 @@ Snake_case aliases (`relative_to_entity_id`, `entity_id`, …) are accepted wher
   "version": 1,
   "defaults": {
     "domain": "shopping",
-    "type": "text",
     "batchSize": 50,
-    "skipUrlFetch": true
+    "idField": "galyaEntityId",
+    "writeBack": true
   },
   "collections": [
     {
       "path": "products",
       "domain": "shopping",
-      "type": "text",
+      "type": "image",
       "fields": ["title", "description", "imageUrl", "status"],
       "url": "{{imageUrl}}",
       "content": "{{title}}\n{{description}}",
       "ref": "{{id}}",
+      "skipUrlFetch": false,
       "rules": {
         "includeWhen": { "status": "published" },
         "excludeWhen": { "draft": true }
       }
     }
-  ],
-  "storage": [
-    {
-      "pathPrefix": "catalog/images/",
-      "domain": "fashion",
-      "type": "image",
-      "url": "downloadUrl",
-      "contentFromMetadata": ["customMetadata.caption"],
-      "rules": {
-        "contentTypes": ["image/jpeg", "image/png", "image/webp"],
-        "minSizeBytes": 1024
-      }
-    }
   ]
 }
 ```
+
+Here `imageUrl` is a **Firebase Storage download URL** (or CDN URL) stored on the Firestore product doc. That is the preferred media sync path.
 
 ### Collections
 
@@ -238,20 +229,26 @@ Snake_case aliases (`relative_to_entity_id`, `entity_id`, …) are accepted wher
 |-------|-------------|
 | `path` | Firestore collection or `users/{uid}/listings`-style path |
 | `fields` | Allowlist (omit = all top-level fields). Unrelated field updates are skipped |
-| `url` | Mustache template → Galya **dedup key** (required, must be a stable HTTPS URL) |
-| `content` | Mustache template → inline text for embeddings |
+| `url` | Mustache template → Galya **dedup key** (required HTTPS URI). For media, use the Storage download URL field |
+| `content` | Mustache template → inline text / captions for embeddings |
 | `domain` | Taste domain (see below) |
 | `type` | `text` \| `image` \| `video` \| `audio` |
 | `ref` | Optional correlation token echoed on search/rerank |
 | `idField` | Firestore field for Galya entity id (**default `galyaEntityId`**). Read on sync + **written back** after upsert. Set `null` to disable |
 | `writeBack` | Write `idField` + `galyaSyncedAt` onto the source doc (default `true` when `idField` enabled) |
-| `skipUrlFetch` | Default: true when `type` is `text` and `content` is set |
+| `skipUrlFetch` | Default true for text+content; keep **false** for media so Galya can GET `url` |
 | `rules.includeWhen` | Shallow equality — all keys must match |
 | `rules.excludeWhen` | Shallow equality — match → do not sync (deletes prior Galya entity if mapped) |
 
 Templates always have `{{id}}` (doc id) and `{{path}}` (full document path).
 
-### Storage
+### Users
+
+Sync does **not** turn Firestore profile `users` into Galya `user` entities. Create users with `galyaCreateEntity` (`type: "user"`) and attach synced content with `galyaLinkEntity` using the write-back `galyaEntityId`.
+
+### Optional: raw Storage object watch
+
+`storage[]` watches a bucket path prefix for orphan uploads (no Firestore row). Prefer Firestore + Storage URL above. Do not enable both for the same assets.
 
 | Field | Description |
 |-------|-------------|
@@ -282,12 +279,12 @@ See [Content domains](https://docs.galya.io) in Galya docs for the latest vocabu
 
 ## How sync works
 
-1. **Write** — `onDocumentWritten` maps the doc → Galya `ContentObject`, calls `createEntity`, waits for the async index job, then **writes `galyaEntityId` (and `galyaSyncedAt`) back onto the source document** so later updates reindex in place.
-2. **Delete / rule exclude** — looks up `_galya_sync/{hash}` and calls `deleteEntity` when an `entityId` is known; clears the write-back fields on the doc.
-3. **Storage** — finalize builds a download/signed URL and upserts media content; **writes `galyaEntityId` into object custom metadata**; delete cleans the mapping.
-4. **Mapping store** — `_galya_sync` tracks `sourceKey → entityId` as a backup; the doc field is the primary stable handle.
+1. **Firestore write** — maps the doc → Galya `ContentObject` (including Storage/CDN URL fields), upserts content, waits for the index job, then **writes `galyaEntityId`** back onto the doc.
+2. **Delete / rule exclude** — deletes the Galya entity when mapped; clears write-back fields.
+3. **Users** — not auto-synced; create/link via callables using write-back ids.
+4. **Optional Storage watch** — only for orphan objects without a Firestore row.
 
-Write-back-only updates are ignored so the sync does not loop. Prefer **stable public HTTPS URLs** for `url` (product pages, CDN images). Align them with `data-galya-id` / signal capture in your app when you personalize later.
+Write-back-only updates are ignored so the sync does not loop. Align catalog URLs with client signal capture (`data-galya-id`) when you personalize later.
 
 ---
 
