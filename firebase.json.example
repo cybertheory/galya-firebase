@@ -1,0 +1,19 @@
+{
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "galya-sync",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firestore-debug.log",
+        "src",
+        "examples",
+        "*.md",
+        "tsconfig.json"
+      ],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+    }
+  ]
+}

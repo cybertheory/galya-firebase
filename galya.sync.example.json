@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "defaults": {
+    "domain": "shopping",
+    "type": "text",
+    "batchSize": 50,
+    "skipUrlFetch": true
+  },
+  "collections": [
+    {
+      "path": "products",
+      "domain": "shopping",
+      "type": "text",
+      "fields": ["title", "description", "imageUrl", "category", "status", "draft"],
+      "url": "{{imageUrl}}",
+      "content": "{{title}}\n{{description}}\nCategory: {{category}}",
+      "ref": "{{id}}",
+      "rules": {
+        "includeWhen": { "status": "published" },
+        "excludeWhen": { "draft": true }
+      }
+    },
+    {
+      "path": "users/{uid}/listings",
+      "domain": "travel",
+      "type": "text",
+      "fields": ["title", "body", "coverUrl", "visible"],
+      "url": "{{coverUrl}}",
+      "content": "{{title}}\n{{body}}",
+      "rules": {
+        "includeWhen": { "visible": true }
+      }
+    }
+  ],
+  "storage": [
+    {
+      "pathPrefix": "catalog/images/",
+      "domain": "fashion",
+      "type": "image",
+      "url": "downloadUrl",
+      "contentFromMetadata": ["customMetadata.caption"],
+      "rules": {
+        "contentTypes": ["image/jpeg", "image/png", "image/webp"],
+        "minSizeBytes": 1024
+      }
+    }
+  ]
+}

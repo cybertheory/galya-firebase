@@ -1,0 +1,39 @@
+{
+  "name": "galya-firebase",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sync Firestore collections and Firebase Storage into Galya taste catalogs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cybertheory/galya-firebase.git"
+  },
+  "keywords": [
+    "galya",
+    "firebase",
+    "firestore",
+    "storage",
+    "taste",
+    "search",
+    "sync"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "lint": "tsc --noEmit",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
