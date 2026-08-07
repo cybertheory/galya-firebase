@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "defaults": {
+    "domain": "shopping",
+    "type": "text",
+    "batchSize": 50,
+    "skipUrlFetch": true
+  },
+  "collections": [
+    {
+      "path": "products",
+      "domain": "shopping",
+      "type": "text",
+      "fields": ["title", "description", "imageUrl", "status"],
+      "url": "https://shop.example.com/products/{{id}}",
+      "content": "{{title}}\n{{description}}",
+      "ref": "{{id}}",
+      "rules": {
+        "includeWhen": { "status": "published" }
+      }
+    }
+  ]
+}

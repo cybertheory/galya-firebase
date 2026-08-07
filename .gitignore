@@ -4,10 +4,8 @@ lib/
 *.log
 .env
 .env.local
-galya.sync.json
+/galya.sync.json
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .DS_Store
-*.js.map
-!firebase.json
