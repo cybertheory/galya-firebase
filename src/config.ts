@@ -204,9 +204,28 @@ export function loadSyncConfig(forceReload = false): GalyaSyncConfig {
 export function loadRuntimeEnv(): RuntimeEnv {
   const apiKey = (process.env.GALYA_API_KEY ?? "").trim();
   if (!apiKey) {
-    throw new Error("galya-firebase: GALYA_API_KEY is required (galya_wsk_… or galya_sk_…)");
+    throw new Error(
+      "galya-firebase: GALYA_API_KEY is required — use a Galya secret key (galya_wsk_… or galya_sk_…)",
+    );
+  }
+  if (apiKey.startsWith("galya_wpub_") || apiKey.startsWith("galya_pub_")) {
+    throw new Error(
+      "galya-firebase: publishable keys (galya_wpub_… / galya_pub_…) cannot call the Galya API. " +
+        "Set GALYA_API_KEY to a secret key (galya_wsk_… preferred, or galya_sk_… + GALYA_WORKSPACE_ID).",
+    );
+  }
+  if (!apiKey.startsWith("galya_wsk_") && !apiKey.startsWith("galya_sk_")) {
+    throw new Error(
+      "galya-firebase: GALYA_API_KEY must be a secret key (galya_wsk_… or galya_sk_…). " +
+        "Publishable keys are for browser/iOS SDKs only.",
+    );
   }
   const workspaceId = (process.env.GALYA_WORKSPACE_ID ?? "").trim() || undefined;
+  if (apiKey.startsWith("galya_sk_") && !workspaceId) {
+    throw new Error(
+      "galya-firebase: account secret keys (galya_sk_…) require GALYA_WORKSPACE_ID (workspace public id).",
+    );
+  }
   const baseUrl =
     (process.env.GALYA_BASE_URL ?? "").trim() || "https://api.galya.io/v1";
   return { apiKey, workspaceId, baseUrl };

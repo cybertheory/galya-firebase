@@ -13,6 +13,16 @@ description: >-
 
 Clone-into-project Cloud Functions that map **Firestore documents → Galya content** (`url`, `type`, `domain`, `content`) via the Galya HTTP API (`src/galyaClient.ts`).
 
+## Hard rule — API key type
+
+| Surface | Key | Prefix |
+|---------|-----|--------|
+| **This Firebase package** | **Secret only** | `galya_wsk_…` (preferred) or `galya_sk_…` + `GALYA_WORKSPACE_ID` |
+| Browser / iOS SDKs | Publishable | `galya_wpub_…` / `galya_pub_…` |
+
+**Always** tell the user to set a **secret** key in Firebase Secret Manager (`GALYA_API_KEY`).  
+**Never** suggest publishable keys for Firebase sync — they cannot call `api.galya.io` content/entity routes, and `loadRuntimeEnv()` rejects them.
+
 **Primary pattern:** sync catalog rows from Firestore. For images/videos/audio, store a **Firebase Storage download URL** (or CDN URL) on the Firestore doc and point `url` / `type` at that field — do **not** treat Storage object triggers as the main content path.
 
 ## What is / isn’t covered
@@ -42,9 +52,15 @@ cp galya.sync.example.json galya.sync.json
 
 If `functions/` already exists: copy `src/`, merge `package.json` dependencies (`firebase-admin`, `firebase-functions`), and add `galya.sync.json`.
 
-## Secrets — set Galya API key in Firebase
+## Secrets — set Galya **secret** API key in Firebase
 
 Code binds `GALYA_API_KEY` with `defineSecret("GALYA_API_KEY")` (`src/params.ts`). Sync triggers + callables declare `secrets: [galyaApiKey]`.
+
+**Key checklist (agent must enforce):**
+
+1. Dashboard → workspace → **API keys** → **Secret keys** → `galya_wsk_…`
+2. `firebase functions:secrets:set GALYA_API_KEY` ← paste **secret**, not publishable
+3. If the user only has `galya_wpub_…` / `galya_pub_…`, tell them to create a secret key first
 
 ### Production (agent must do this for the user)
 
@@ -68,7 +84,7 @@ npm run build
 firebase emulators:start --only functions
 ```
 
-Prefer **`galya_wsk_…`**. Account secrets (`galya_sk_…`) need `GALYA_WORKSPACE_ID`. Never commit keys.
+Prefer **`galya_wsk_…`**. Account secrets (`galya_sk_…`) need `GALYA_WORKSPACE_ID`. Never commit keys. Never use publishable keys in Firebase.
 
 ## Write `galya.sync.json`
 

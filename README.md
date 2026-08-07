@@ -2,6 +2,9 @@
 
 **Sync Firestore into Galya taste catalogs.**
 
+> **API key (required):** use a Galya **secret** key only — `galya_wsk_…` (preferred) or `galya_sk_…` (+ `GALYA_WORKSPACE_ID`).  
+> **Do not** use publishable keys (`galya_wpub_…` / `galya_pub_…`). Those are for browser/iOS SDKs and are rejected by this package and by `api.galya.io` content routes.
+
 Clone this repo into your Firebase Functions project, name the collections and fields you care about, and every write becomes taste-ready **content** — built on [Galya](https://galya.io) content domains.
 
 For images and other media, put a **publicly downloadable** Firebase Storage (or CDN) HTTPS URL on the Firestore document and sync that field as Galya `url`. Galya’s indexer must be able to GET it.
@@ -56,7 +59,8 @@ This repo binds `GALYA_API_KEY` via Firebase **Secret Manager** (`defineSecret` 
 #### Production (recommended)
 
 1. Create a **workspace secret** in Galya: Dashboard → your workspace → **API keys** → **Secret keys** → copy a `galya_wsk_…` value.  
-   Do **not** use publishable keys (`galya_wpub_` / `galya_pub_`) — they are rejected on API routes.
+   **Required key type:** secret (`galya_wsk_…` or `galya_sk_…`).  
+   **Forbidden:** publishable (`galya_wpub_` / `galya_pub_`) — rejected at runtime by this package and on API routes.
 
 2. From your **Firebase project root** (the directory with `.firebaserc` / `firebase.json`, usually the parent of `functions/`):
 
@@ -316,9 +320,9 @@ Write-back-only updates are ignored so the sync does not loop. Align catalog URL
 
 ## Security & billing
 
-- **Never commit** `GALYA_API_KEY` or publishable keys to git.
+- **Never commit** `GALYA_API_KEY` to git.
 - Store production keys with **`firebase functions:secrets:set GALYA_API_KEY`** (Secret Manager), not in `galya.sync.json` or committed `.env`.
-- Use a **workspace secret** (`galya_wsk_…`) scoped to the target workspace.
+- **Secret keys only:** `galya_wsk_…` (preferred) or `galya_sk_…` + workspace id. Publishable keys belong in the browser/iOS SDKs, not here.
 - Firebase requires the **Blaze** plan for outbound Galya API calls from Cloud Functions.
 - Galya usage follows your workspace plan (indexing + embeddings).
 
