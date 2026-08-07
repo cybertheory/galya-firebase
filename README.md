@@ -231,7 +231,7 @@ Here `imageUrl` is a **Firebase Storage download URL** (or CDN URL) stored on th
 | `fields` | Allowlist (omit = all top-level fields). Unrelated field updates are skipped |
 | `url` | Mustache template → Galya **dedup key** (required HTTPS URI). For media, use the Storage download URL field |
 | `content` | Mustache template → inline text / captions for embeddings |
-| `domain` | Taste domain (see below) |
+| `domain` | **Required** taste domain (or set `defaults.domain`). Wrong domain misroutes embeddings — see Domains below |
 | `type` | `text` \| `image` \| `video` \| `audio` |
 | `ref` | Optional correlation token echoed on search/rerank |
 | `idField` | Firestore field for Galya entity id (**default `galyaEntityId`**). Read on sync + **written back** after upsert. Set `null` to disable |
@@ -261,6 +261,8 @@ Sync does **not** turn Firestore profile `users` into Galya `user` entities. Cre
 | `rules.minSizeBytes` / `maxSizeBytes` | Size gates |
 
 ### Domains
+
+**Required on every collection** (or via `defaults.domain`). Domain selects embedding/routing and taste landscapes — set it deliberately.
 
 | Domain | Use for |
 |--------|---------|

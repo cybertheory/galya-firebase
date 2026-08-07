@@ -77,8 +77,26 @@ Ask the user for:
 1. Collection paths for **content** (e.g. `products`, `listings`)
 2. Which fields to sync (include the Storage download URL field if media)
 3. How to build Galya `url` — prefer **Storage HTTPS download URL** on the doc for media
-4. Galya **domain** + **type** (`text` / `image` / `video` / `audio`)
-5. Include/exclude rules
+4. **Required: Galya `domain`** — must match the catalog taste space (wrong domain = wrong embeddings / landscapes). Confirm with the user; do not guess silently.
+5. Galya **type** (`text` / `image` / `video` / `audio`)
+6. Include/exclude rules
+
+### Domain is required
+
+Every synced content object needs a correct **`domain`** (collection-level or `defaults.domain`). Galya uses it for indexing, embedding/routing, and dashboard taste landscapes.
+
+Allowed values:
+
+`uiux` · `professional` · `shopping` · `fashion` · `restaurants` · `travel` · `hospitality` · `conversation`
+
+Aliases: `ecommerce` → shopping, `linkedin` → professional, `ux` → uiux.
+
+**Agent rules:**
+
+- Always set `domain` (or `defaults.domain`) before deploy — validation fails if missing
+- Ask which domain fits the collection; if unclear, ask rather than defaulting blindly
+- Use one domain per collection when catalogs differ (e.g. products → `shopping`, stays → `travel`)
+- Do not invent domain strings outside the list above
 
 ### Content sync (Storage URL on Firestore → Galya media)
 
@@ -141,9 +159,9 @@ npm run build && firebase deploy --only functions
 
 ## Do / Don’t
 
-**Do:** sync content collections; put Storage URLs on those docs for media; link users via callables after write-back.
+**Do:** sync content collections; set the correct **`domain`** per collection; put Storage URLs on those docs for media; link users via callables after write-back.
 
-**Don’t:** use Storage object triggers as the default content path; expect profile `users` to become Galya users automatically; duplicate assets via both `collections[]` and `storage[]`.
+**Don’t:** omit or invent `domain`; use Storage object triggers as the default content path; expect profile `users` to become Galya users automatically; duplicate assets via both `collections[]` and `storage[]`.
 
 ## Repo
 
