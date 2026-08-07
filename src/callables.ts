@@ -215,7 +215,7 @@ export const galyaCreateEntityBatch = withGalyaClient(
         : undefined;
     if (jobId && data.wait !== false) {
       const done = await api.waitForEntityJob(jobId);
-      return { job_id: jobId, ...done };
+      return { ...done, job_id: jobId };
     }
     return accepted;
   },
