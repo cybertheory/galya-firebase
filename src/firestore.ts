@@ -13,6 +13,14 @@ import {
 } from "./rules";
 import { applyGalyaEnvFromParams, secretBindings } from "./params";
 import { deleteSyncedContent, resetGalyaClient, upsertContent } from "./sync";
+import {
+  clearEntityIdOnFirestoreDoc,
+  isWritebackOnlyChange,
+  resolveIdField,
+  syncManagedFields,
+  writeBackEnabled,
+  writeEntityIdToFirestoreDoc,
+} from "./writeback";
 
 export function createFirestoreSyncHandler(
   cfg: CollectionSyncConfig,
@@ -42,6 +50,10 @@ export function createFirestoreSyncHandler(
       ? firestoreDocToPlain(afterSnap.data() as Record<string, unknown>)
       : undefined;
 
+    const idField = resolveIdField(cfg, defaults);
+    const doWriteBack = writeBackEnabled(cfg, defaults);
+    const managed = syncManagedFields(cfg, defaults);
+
     if (beforeData && !afterData) {
       await deleteSyncedContent({ source: "firestore", sourceKey: docPath });
       return;
@@ -49,18 +61,39 @@ export function createFirestoreSyncHandler(
 
     if (!afterData) return;
 
+    // Ignore our own write-back updates (entity id / syncedAt only).
+    if (beforeData && isWritebackOnlyChange(beforeData, afterData, managed)) {
+      return;
+    }
+
     const include = shouldInclude(afterData, cfg.rules);
     const wasIncluded = beforeData ? shouldInclude(beforeData, cfg.rules) : false;
 
     if (!include) {
-      if (wasIncluded || beforeData) {
+      // Only delete when transitioning from included → excluded (not on every edit to an excluded doc).
+      if (wasIncluded) {
         await deleteSyncedContent({ source: "firestore", sourceKey: docPath });
+        try {
+          await clearEntityIdOnFirestoreDoc({
+            docPath,
+            idField,
+            enabled: doWriteBack,
+          });
+        } catch (err) {
+          console.warn("galya-firebase: clear entity id write-back failed", docPath, err);
+        }
       }
       return;
     }
 
     if (beforeData) {
-      const dataChanged = fieldsChanged(beforeData, afterData, cfg.fields);
+      const watchFields = (cfg.fields ?? []).filter((f) => !managed.includes(f));
+      const dataChanged = fieldsChanged(
+        beforeData,
+        afterData,
+        // Empty allowlist → all fields; write-back-only updates already returned above.
+        cfg.fields && cfg.fields.length > 0 ? watchFields : undefined,
+      );
       const rulesChanged = ruleFieldsChanged(beforeData, afterData, cfg);
       if (!dataChanged && !rulesChanged) {
         return;
@@ -75,12 +108,24 @@ export function createFirestoreSyncHandler(
       data: afterData,
     });
 
-    await upsertContent({
+    const result = await upsertContent({
       source: "firestore",
       sourceKey: docPath,
       mapped,
       waitForJob: true,
     });
+
+    try {
+      await writeEntityIdToFirestoreDoc({
+        docPath,
+        idField,
+        entityId: result.entityId,
+        enabled: doWriteBack,
+        currentData: afterData,
+      });
+    } catch (err) {
+      console.error("galya-firebase: entity id write-back failed", docPath, err);
+    }
   };
 }
 

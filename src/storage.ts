@@ -9,6 +9,10 @@ import { getPath, renderTemplate } from "./rules";
 import { contentTypeFromMime, mapStorageObject } from "./map";
 import { applyGalyaEnvFromParams, secretBindings } from "./params";
 import { deleteSyncedContent, resetGalyaClient, upsertContent } from "./sync";
+import {
+  readStorageEntityId,
+  writeEntityIdToStorageObject,
+} from "./writeback";
 
 function matchesPrefix(objectName: string, prefix: string): boolean {
   return objectName.startsWith(prefix);
@@ -115,14 +119,26 @@ export function createStorageFinalizeHandler(cfg: StorageSyncConfig) {
       type,
       url,
       content,
+      existingEntityId: readStorageEntityId(customMeta),
     });
 
-    await upsertContent({
+    const result = await upsertContent({
       source: "storage",
       sourceKey: `gs://${bucket}/${name}`,
       mapped,
       waitForJob: true,
     });
+
+    try {
+      await writeEntityIdToStorageObject({
+        bucket,
+        name,
+        entityId: result.entityId,
+        enabled: cfg.writeBack !== false,
+      });
+    } catch (err) {
+      console.error("galya-firebase: storage entity id write-back failed", name, err);
+    }
   };
 }
 

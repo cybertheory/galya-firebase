@@ -135,7 +135,8 @@ Requires a signed-in caller (Firebase Auth). Restrict invoke IAM to admins in pr
 | `domain` | Taste domain (see below) |
 | `type` | `text` \| `image` \| `video` \| `audio` |
 | `ref` | Optional correlation token echoed on search/rerank |
-| `idField` | Optional document field holding an existing Galya content entity id |
+| `idField` | Firestore field for Galya entity id (**default `galyaEntityId`**). Read on sync + **written back** after upsert. Set `null` to disable |
+| `writeBack` | Write `idField` + `galyaSyncedAt` onto the source doc (default `true` when `idField` enabled) |
 | `skipUrlFetch` | Default: true when `type` is `text` and `content` is set |
 | `rules.includeWhen` | Shallow equality — all keys must match |
 | `rules.excludeWhen` | Shallow equality — match → do not sync (deletes prior Galya entity if mapped) |
@@ -150,6 +151,7 @@ Templates always have `{{id}}` (doc id) and `{{path}}` (full document path).
 | `domain` / `type` | Galya content domain and media type |
 | `url` | `downloadUrl` (default) or a template (`{{name}}`, `{{bucket}}`, …) |
 | `contentFromMetadata` | Dot-paths under object metadata for captions |
+| `writeBack` | Write `galyaEntityId` into custom metadata after upsert (default `true`) |
 | `rules.contentTypes` | MIME allowlist |
 | `rules.minSizeBytes` / `maxSizeBytes` | Size gates |
 
@@ -172,12 +174,12 @@ See [Content domains](https://docs.galya.io) in Galya docs for the latest vocabu
 
 ## How sync works
 
-1. **Write** — `onDocumentWritten` maps the doc → Galya `ContentObject`, calls `createEntity`, waits for the async index job.
-2. **Delete / rule exclude** — looks up `_galya_sync/{hash}` and calls `deleteEntity` when an `entityId` is known.
-3. **Storage** — finalize builds a download/signed URL and upserts media content; delete cleans the mapping.
-4. **Mapping store** — `_galya_sync` in your Firestore project tracks `sourceKey → entityId` so deletes stay consistent.
+1. **Write** — `onDocumentWritten` maps the doc → Galya `ContentObject`, calls `createEntity`, waits for the async index job, then **writes `galyaEntityId` (and `galyaSyncedAt`) back onto the source document** so later updates reindex in place.
+2. **Delete / rule exclude** — looks up `_galya_sync/{hash}` and calls `deleteEntity` when an `entityId` is known; clears the write-back fields on the doc.
+3. **Storage** — finalize builds a download/signed URL and upserts media content; **writes `galyaEntityId` into object custom metadata**; delete cleans the mapping.
+4. **Mapping store** — `_galya_sync` tracks `sourceKey → entityId` as a backup; the doc field is the primary stable handle.
 
-Prefer **stable public HTTPS URLs** for `url` (product pages, CDN images). Align them with `data-galya-id` / signal capture in your app when you personalize later.
+Write-back-only updates are ignored so the sync does not loop. Prefer **stable public HTTPS URLs** for `url` (product pages, CDN images). Align them with `data-galya-id` / signal capture in your app when you personalize later.
 
 ---
 

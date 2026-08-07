@@ -9,6 +9,11 @@ import { applyGalyaEnvFromParams, secretBindings } from "./params";
 import { shouldInclude } from "./rules";
 import { resetGalyaClient, upsertContentBatch } from "./sync";
 import type { CollectionSyncConfig, GalyaSyncDefaults, MappedContent } from "./types";
+import {
+  resolveIdField,
+  writeBackEnabled,
+  writeEntityIdToFirestoreDoc,
+} from "./writeback";
 
 type BackfillRequest = {
   paths?: string[];
@@ -110,6 +115,29 @@ async function backfillCollection(
         });
         if (jobId) jobIds.push(jobId);
         upserted += results.length;
+
+        const idField = resolveIdField(cfg, defaults);
+        const doWriteBack = writeBackEnabled(cfg, defaults);
+        if (doWriteBack && idField) {
+          for (let i = 0; i < items.length; i++) {
+            const entityId = results[i]?.entityId;
+            if (!entityId) continue;
+            try {
+              await writeEntityIdToFirestoreDoc({
+                docPath: items[i]!.sourceKey,
+                idField,
+                entityId,
+                enabled: true,
+              });
+            } catch (err) {
+              console.warn(
+                "galya-firebase: backfill write-back failed",
+                items[i]!.sourceKey,
+                err,
+              );
+            }
+          }
+        }
       } catch (err) {
         console.error("galya-firebase: batch upsert failed", cfg.path, err);
         errors += items.length;

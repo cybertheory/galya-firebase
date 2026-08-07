@@ -70,6 +70,7 @@ function validateCollection(raw: unknown, index: number): CollectionSyncConfig {
   if (typeof o.ref === "string") cfg.ref = o.ref;
   if (o.idField === null) cfg.idField = null;
   else if (typeof o.idField === "string") cfg.idField = o.idField;
+  if (typeof o.writeBack === "boolean") cfg.writeBack = o.writeBack;
   if (typeof o.skipUrlFetch === "boolean") cfg.skipUrlFetch = o.skipUrlFetch;
   if (o.rules && typeof o.rules === "object") {
     const rules = o.rules as Record<string, unknown>;
@@ -105,6 +106,7 @@ function validateStorage(raw: unknown, index: number): StorageSyncConfig {
       assertString(f, `storage[${index}].contentFromMetadata[${i}]`),
     );
   }
+  if (typeof o.writeBack === "boolean") cfg.writeBack = o.writeBack;
   if (o.rules && typeof o.rules === "object") {
     const rules = o.rules as Record<string, unknown>;
     cfg.rules = {};
@@ -150,6 +152,14 @@ export function parseSyncConfig(raw: unknown): GalyaSyncConfig {
           : undefined,
       skipUrlFetch:
         typeof defaults.skipUrlFetch === "boolean" ? defaults.skipUrlFetch : undefined,
+      idField:
+        defaults.idField === null
+          ? null
+          : typeof defaults.idField === "string"
+            ? defaults.idField
+            : undefined,
+      writeBack:
+        typeof defaults.writeBack === "boolean" ? defaults.writeBack : undefined,
     };
   }
 

@@ -40,10 +40,15 @@ export type CollectionSyncConfig = {
   /** Optional Galya correlation `ref` template. */
   ref?: string;
   /**
-   * When set, reuse this Galya content entity id from the document field
-   * for in-place reindex (`ids[]` / createEntity id).
+   * Firestore field for the Galya content entity id (read + write-back).
+   * Default: `galyaEntityId`. Set `null` to disable.
    */
   idField?: string | null;
+  /**
+   * Write `idField` (+ `galyaSyncedAt`) onto the source doc after upsert.
+   * Default: true when `idField` is enabled.
+   */
+  writeBack?: boolean;
   /**
    * When true (default for text with enough content), set skip_url_fetch.
    * Override explicitly if Galya should GET the url.
@@ -71,6 +76,11 @@ export type StorageSyncConfig = {
   url?: "downloadUrl" | string;
   /** Dot-paths under object metadata for caption/notes → content. */
   contentFromMetadata?: string[];
+  /**
+   * Write `galyaEntityId` into Storage custom metadata after upsert.
+   * Default: true.
+   */
+  writeBack?: boolean;
   rules?: StorageRules;
 };
 
@@ -79,6 +89,10 @@ export type GalyaSyncDefaults = {
   type?: ContentType;
   batchSize?: number;
   skipUrlFetch?: boolean;
+  /** Default id field for collections (default `galyaEntityId`; `null` disables). */
+  idField?: string | null;
+  /** Default write-back for collections (default true when idField enabled). */
+  writeBack?: boolean;
 };
 
 export type GalyaSyncConfig = {

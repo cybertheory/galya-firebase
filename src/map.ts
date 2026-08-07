@@ -1,17 +1,14 @@
 import type { CollectionSyncConfig, GalyaSyncDefaults, MappedContent, ContentType } from "./types";
 import { normalizeDomain } from "./config";
 import { getPath, pickFields, renderTemplate } from "./rules";
+import { resolveIdField } from "./writeback";
 
 function serializeFirestoreValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== "object") return value;
-  // Firestore Timestamp
-  if (
-    typeof (value as { toDate?: unknown }).toDate === "function"
-  ) {
+  if (typeof (value as { toDate?: unknown }).toDate === "function") {
     return (value as { toDate: () => Date }).toDate().toISOString();
   }
-  // GeoPoint
   if (
     typeof (value as { latitude?: unknown }).latitude === "number" &&
     typeof (value as { longitude?: unknown }).longitude === "number"
@@ -21,7 +18,6 @@ function serializeFirestoreValue(value: unknown): unknown {
       lng: (value as { longitude: number }).longitude,
     };
   }
-  // DocumentReference
   if (typeof (value as { path?: unknown }).path === "string") {
     return (value as { path: string }).path;
   }
@@ -78,9 +74,10 @@ export function mapFirestoreDoc(opts: {
     ref = renderTemplate(cfg.ref, ctx).trim() || undefined;
   }
 
+  const idField = resolveIdField(cfg, defaults);
   let existingEntityId: string | null | undefined;
-  if (cfg.idField) {
-    const raw = getPath(data, cfg.idField);
+  if (idField) {
+    const raw = getPath(data, idField);
     existingEntityId = typeof raw === "string" && raw.trim() ? raw.trim() : null;
   }
 
@@ -100,7 +97,10 @@ export function mapFirestoreDoc(opts: {
   };
 }
 
-export function contentTypeFromMime(mime: string | undefined, fallback: ContentType): ContentType {
+export function contentTypeFromMime(
+  mime: string | undefined,
+  fallback: ContentType,
+): ContentType {
   if (!mime) return fallback;
   const m = mime.toLowerCase();
   if (m.startsWith("image/")) return "image";
@@ -115,6 +115,7 @@ export function mapStorageObject(opts: {
   type: ContentType;
   url: string;
   content?: string;
+  existingEntityId?: string;
 }): MappedContent {
   return {
     url: opts.url,
@@ -122,5 +123,6 @@ export function mapStorageObject(opts: {
     domain: normalizeDomain(opts.domain),
     content: opts.content,
     skip_url_fetch: false,
+    existingEntityId: opts.existingEntityId,
   };
 }

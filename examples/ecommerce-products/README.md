@@ -21,5 +21,6 @@ Minimal config that syncs a top-level Firestore `products` collection into Galya
 | `type` | `text` |
 | `domain` | `shopping` |
 | `content` | title + description (inline; `skipUrlFetch`) |
+| `galyaEntityId` | Written back after sync for stable reindex |
 
 Copy this file to your Functions root as `galya.sync.json`, set `GALYA_API_KEY`, deploy, then call `galyaBackfill` once.

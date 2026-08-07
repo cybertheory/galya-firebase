@@ -1,6 +1,6 @@
 {
   "name": "galya-firebase",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Sync Firestore collections and Firebase Storage into Galya taste catalogs",
   "license": "MIT",

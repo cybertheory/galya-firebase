@@ -85,8 +85,9 @@ Aliases: `ecommerce`→shopping, `linkedin`→professional.
 ### Rules (v1)
 
 - `includeWhen`: shallow equality, all keys must match
-- `excludeWhen`: shallow equality → skip sync; if previously synced, `deleteEntity`
+- `excludeWhen`: shallow equality → skip sync; if previously synced, `deleteEntity` + clear write-back fields
 - Templates: `{{field}}`, `{{a.b}}`, plus `{{id}}`, `{{path}}`
+- **`idField`** (default `galyaEntityId`): read for in-place reindex; **written back** after upsert with `galyaSyncedAt`. Set `idField: null` or `writeBack: false` to disable.
 
 ### Storage block
 
@@ -126,6 +127,7 @@ Synced sources are tracked in Firestore `_galya_sync/{hash}` (`sourceKey` → `e
 **Do**
 
 - Prefer stable public HTTPS URLs for Galya `url`
+- Rely on write-back: after sync, docs get `galyaEntityId` (and `galyaSyncedAt`) for stable in-place reindex
 - Use workspace secrets (`galya_wsk_`)
 - Set `skipUrlFetch: true` when providing enough inline `content` for text
 - Align catalog URLs with client signal capture (`data-galya-id`) when personalizing
@@ -134,6 +136,7 @@ Synced sources are tracked in Firestore `_galya_sync/{hash}` (`sourceKey` → `e
 
 - Invent Galya REST payloads — use `src/galyaClient.ts` (or `@galya/agents`)
 - Commit API keys
+- Put `galyaEntityId` in your `fields` allowlist unless you intentionally want edits to that field to re-trigger sync (write-back-only updates are ignored either way)
 - Expect parent `linked_content` / user mean-pool from this sync (do that separately after ingest)
 - Use deep query DSLs — only shallow `includeWhen` / `excludeWhen` in v1
 

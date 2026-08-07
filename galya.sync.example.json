@@ -4,7 +4,9 @@
     "domain": "shopping",
     "type": "text",
     "batchSize": 50,
-    "skipUrlFetch": true
+    "skipUrlFetch": true,
+    "idField": "galyaEntityId",
+    "writeBack": true
   },
   "collections": [
     {
@@ -39,6 +41,7 @@
       "type": "image",
       "url": "downloadUrl",
       "contentFromMetadata": ["customMetadata.caption"],
+      "writeBack": true,
       "rules": {
         "contentTypes": ["image/jpeg", "image/png", "image/webp"],
         "minSizeBytes": 1024
