@@ -3,7 +3,7 @@ name: galya-firebase
 description: >-
   Sync Firestore collections and Firebase Storage into Galya taste catalogs.
   Use when the user mentions Firebase, Firestore, Storage sync, Galya content
-  domains, clone galya-firebase, Algolia-style Firebase sync, or indexing
+  domains, clone galya-firebase, Firebase Functions sync, or indexing
   Firebase data into Galya.
 ---
 
@@ -13,7 +13,7 @@ Clone-into-project Cloud Functions that map Firestore documents and Storage obje
 
 ## When to use
 
-- User wants Firestore → Galya sync (like Algolia’s Firebase extension)
+- User wants Firestore → Galya sync from Firebase Cloud Functions
 - User names collections/fields to index into a Galya domain
 - User wants Storage images/videos as Galya media content
 - User asks to wire `galya.sync.json`, backfill, or Firebase Functions for Galya

@@ -2,7 +2,7 @@
 
 **Sync Firestore + Storage into Galya taste catalogs.**
 
-The Algolia Firebase pattern — built on [Galya](https://galya.io) content domains. Clone this repo into your Firebase Functions project, name the collections and fields you care about, and every write becomes taste-ready content.
+Clone this repo into your Firebase Functions project, name the collections and fields you care about, and every write becomes taste-ready content — built on [Galya](https://galya.io) content domains.
 
 ```
 Firestore write  ──►  Cloud Function  ──►  Galya POST /v1/entity
