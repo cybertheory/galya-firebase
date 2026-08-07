@@ -57,8 +57,16 @@ export async function upsertContent(opts: {
     id: entityIdHint,
   });
 
-  let entityId: string | undefined = accepted.entity_id ?? accepted.id;
-  let jobId: string | undefined = accepted.job_id || undefined;
+  let entityId: string | undefined =
+    typeof accepted.entity_id === "string"
+      ? accepted.entity_id
+      : typeof accepted.id === "string"
+        ? accepted.id
+        : undefined;
+  let jobId: string | undefined =
+    typeof accepted.job_id === "string" && accepted.job_id.trim()
+      ? accepted.job_id
+      : undefined;
 
   if (jobId && opts.waitForJob !== false) {
     const done = await api.waitForEntityJob(jobId, {

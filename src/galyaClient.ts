@@ -1,7 +1,6 @@
 /**
- * Minimal Galya content API client for Cloud Functions.
- * Mirrors the subset of @galya/agents used by this sync (create / batch / poll / delete).
- * Kept in-repo so the clone template works against the live API without waiting on npm.
+ * Minimal Galya API client for Cloud Functions.
+ * Covers content sync + taste/ops callables (search, rerank, gauge, link, …).
  */
 
 export type ContentType = "image" | "text" | "audio" | "video";
@@ -30,6 +29,32 @@ export type EntityJobPollResult = {
   job_id: string;
   status: string;
   results?: Array<{ entity_id: string; created: boolean; url?: string }>;
+};
+
+export type RelativeParams = {
+  relativeToEntityId: string;
+  inTermsOfEntityType: string;
+  domain?: string;
+  task?: string;
+};
+
+export type GaugeRequest = {
+  response: string;
+  followup: string;
+  prompt?: string;
+};
+
+export type GaugeResult = {
+  resonance: number;
+  response: string;
+  followup: string;
+  prompt?: string;
+};
+
+export type LinkEntityRequest = {
+  entity_id: string;
+  rel?: string;
+  weight?: number;
 };
 
 export type GalyaClientOptions = {
@@ -115,55 +140,120 @@ export class GalyaClient {
         parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
           ? String((parsed as { error: unknown }).error)
           : `Galya API ${res.status}`;
-      throw new GalyaApiError(msg, res.status, undefined, parsed);
+      const code =
+        parsed && typeof parsed === "object" && parsed !== null && "code" in parsed
+          ? String((parsed as { code: unknown }).code)
+          : undefined;
+      throw new GalyaApiError(msg, res.status, code, parsed);
     }
     return parsed as T;
   }
 
+  async search(
+    params: RelativeParams,
+    body: { query: string; additional_candidates?: ContentObject[] },
+  ): Promise<unknown> {
+    return this.request("POST", "/search", {
+      query: {
+        relative_to_entity_id: params.relativeToEntityId,
+        in_terms_of_entity_type: params.inTermsOfEntityType,
+      },
+      body,
+    });
+  }
+
+  async rerank(
+    params: RelativeParams,
+    body: {
+      candidates: Array<ContentObject | string>;
+      history?: string[];
+      item_texts?: Record<string, string>;
+      item_images?: Record<string, string>;
+    },
+  ): Promise<unknown> {
+    return this.request("POST", "/rerank", {
+      query: {
+        relative_to_entity_id: params.relativeToEntityId,
+        in_terms_of_entity_type: params.inTermsOfEntityType,
+        domain: params.domain,
+      },
+      body,
+    });
+  }
+
+  async recommend(
+    params: RelativeParams,
+    body: {
+      candidates: Array<ContentObject | string>;
+      history: string[];
+      item_texts?: Record<string, string>;
+      item_images?: Record<string, string>;
+    },
+  ): Promise<unknown> {
+    return this.request("POST", "/recommend", {
+      query: {
+        relative_to_entity_id: params.relativeToEntityId,
+        in_terms_of_entity_type: params.inTermsOfEntityType,
+        domain: params.domain,
+      },
+      body,
+    });
+  }
+
+  async ask(params: RelativeParams, body: { query: string }): Promise<unknown> {
+    return this.request("POST", "/ask", {
+      query: {
+        relative_to_entity_id: params.relativeToEntityId,
+        in_terms_of_entity_type: params.inTermsOfEntityType,
+      },
+      body,
+    });
+  }
+
+  async explain(
+    params: RelativeParams,
+    body: { query: string },
+  ): Promise<unknown> {
+    return this.request("POST", "/explain", {
+      query: {
+        relative_to_entity_id: params.relativeToEntityId,
+        in_terms_of_entity_type: params.inTermsOfEntityType,
+        domain: params.domain,
+        task: params.task,
+      },
+      body,
+    });
+  }
+
+  async gauge(body: GaugeRequest): Promise<GaugeResult> {
+    return this.request<GaugeResult>("POST", "/gauge", { body });
+  }
+
   async createEntity(body: {
-    content: ContentObject;
+    content?: ContentObject;
     id?: string;
     force_reindex?: boolean;
-  }): Promise<CreateEntityBatchJobAccepted & { id?: string; entity_id?: string }> {
-    const payload: Record<string, unknown> = { content: body.content };
+    type?: string;
+    name?: string;
+    description?: string;
+    linked_content?: ContentObject[];
+  }): Promise<Record<string, unknown>> {
+    if (body.content && body.linked_content?.length) {
+      throw new Error("createEntity: content and linked_content are mutually exclusive");
+    }
+    if (body.content) {
+      const payload: Record<string, unknown> = { content: body.content };
+      if (body.id) payload.id = body.id;
+      if (body.force_reindex !== undefined) payload.force_reindex = body.force_reindex;
+      return this.request("POST", "/entity", { body: payload });
+    }
+    const payload: Record<string, unknown> = {};
     if (body.id) payload.id = body.id;
-    if (body.force_reindex !== undefined) payload.force_reindex = body.force_reindex;
-    const raw = await this.request<Record<string, unknown>>("POST", "/entity", {
-      body: payload,
-    });
-    if (typeof raw.job_id === "string" && raw.job_id.trim()) {
-      return {
-        job_id: raw.job_id,
-        job_arn: typeof raw.job_arn === "string" ? raw.job_arn : undefined,
-        status: typeof raw.status === "string" ? raw.status : "Submitted",
-        status_path:
-          typeof raw.status_path === "string"
-            ? raw.status_path
-            : `/v1/entity/batch/jobs/${raw.job_id}`,
-        id: typeof raw.id === "string" ? raw.id : undefined,
-        entity_id:
-          typeof raw.entity_id === "string"
-            ? raw.entity_id
-            : typeof raw.id === "string"
-              ? raw.id
-              : undefined,
-      };
-    }
-    const id =
-      typeof raw.id === "string"
-        ? raw.id
-        : typeof raw.entity_id === "string"
-          ? raw.entity_id
-          : "";
-    if (!id) {
-      throw new GalyaApiError("createEntity: response missing id or job_id", 200, undefined, raw);
-    }
-    return {
-      job_id: "",
-      status: "Completed",
-      id,
-      entity_id: id,
-    };
+    if (body.type) payload.type = body.type;
+    if (body.name) payload.name = body.name;
+    if (body.description) payload.description = body.description;
+    if (body.linked_content) payload.linked_content = body.linked_content;
+    return this.request("POST", "/entity", { body: payload });
   }
 
   async createEntityBatch(body: {
@@ -206,9 +296,24 @@ export class GalyaClient {
     }
   }
 
+  async getEntity(entityId: string): Promise<unknown> {
+    return this.request("GET", "/entity", {
+      query: { entity_id: entityId },
+    });
+  }
+
   async deleteEntity(entityId: string): Promise<{ success?: boolean }> {
     return this.request("DELETE", "/entity", {
       query: { entity_id: entityId },
+    });
+  }
+
+  async linkEntity(
+    parentId: string,
+    body: LinkEntityRequest,
+  ): Promise<unknown> {
+    return this.request("POST", `/entity/${encodeURIComponent(parentId)}/link`, {
+      body,
     });
   }
 }

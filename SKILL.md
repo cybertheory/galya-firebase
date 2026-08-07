@@ -118,6 +118,23 @@ Callable `galyaBackfill` (Firebase Auth required):
 { "paths": ["products"], "batchSize": 50 }
 ```
 
+## Galya ops callables
+
+All require Firebase Auth. Use these so clients never hold the workspace secret:
+
+| Callable | Data |
+|----------|------|
+| `galyaGauge` | `{ response, followup, prompt? }` |
+| `galyaSearch` | `{ relativeToEntityId, inTermsOfEntityType, query }` |
+| `galyaRerank` | `{ relativeToEntityId, inTermsOfEntityType, candidates, history?, domain? }` |
+| `galyaRecommend` | `{ relativeToEntityId, inTermsOfEntityType, candidates, history, domain? }` |
+| `galyaAsk` / `galyaExplain` | `{ relativeToEntityId, inTermsOfEntityType, query, … }` |
+| `galyaCreateEntity` | content upsert or parent + `linked_content` |
+| `galyaCreateEntityBatch` | `{ content[], ids? }` |
+| `galyaGetEntity` / `galyaDeleteEntity` | `{ entity_id }` |
+| `galyaLinkEntity` | `{ parent_id, entity_id, rel?, weight? }` |
+| `galyaGetEntityJob` | `{ job_id }` |
+
 ## Mapping store
 
 Synced sources are tracked in Firestore `_galya_sync/{hash}` (`sourceKey` → `entityId`). Do not treat this as app data; it enables deletes.

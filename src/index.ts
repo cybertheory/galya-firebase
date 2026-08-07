@@ -8,13 +8,40 @@ import {
 import { buildFirestoreFunction } from "./firestore";
 import { buildStorageFunctions } from "./storage";
 import { galyaBackfill } from "./backfill";
+import {
+  galyaAsk,
+  galyaCreateEntity,
+  galyaCreateEntityBatch,
+  galyaDeleteEntity,
+  galyaExplain,
+  galyaGauge,
+  galyaGetEntity,
+  galyaGetEntityJob,
+  galyaLinkEntity,
+  galyaRecommend,
+  galyaRerank,
+  galyaSearch,
+} from "./callables";
 
 initializeApp();
 
 const config = loadSyncConfig();
 
 const triggers: Record<string, unknown> = {
+  // Ops / taste callables (Firebase Auth required)
   galyaBackfill,
+  galyaGauge,
+  galyaSearch,
+  galyaRerank,
+  galyaRecommend,
+  galyaAsk,
+  galyaExplain,
+  galyaCreateEntity,
+  galyaCreateEntityBatch,
+  galyaGetEntityJob,
+  galyaGetEntity,
+  galyaDeleteEntity,
+  galyaLinkEntity,
 };
 
 config.collections.forEach((col, index) => {

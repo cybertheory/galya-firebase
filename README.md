@@ -82,6 +82,45 @@ Requires a signed-in caller (Firebase Auth). Restrict invoke IAM to admins in pr
 
 ---
 
+## Callable Galya ops
+
+All require **Firebase Auth**. They proxy your workspace secret to the Galya API so clients never hold `galya_wsk_…`.
+
+| Callable | Purpose | Payload (high level) |
+|----------|---------|----------------------|
+| `galyaGauge` | Reply resonance `[0,1]` | `{ response, followup, prompt? }` |
+| `galyaSearch` | Taste search | `{ relativeToEntityId, inTermsOfEntityType, query, additional_candidates? }` |
+| `galyaRerank` | Rank candidates | `{ relativeToEntityId, inTermsOfEntityType, candidates, history?, domain?, … }` |
+| `galyaRecommend` | Recommend from history | `{ relativeToEntityId, inTermsOfEntityType, candidates, history, domain?, … }` |
+| `galyaAsk` | Ask relative to an entity | `{ relativeToEntityId, inTermsOfEntityType, query }` |
+| `galyaExplain` | Explain a query | `{ relativeToEntityId, inTermsOfEntityType, query, domain?, task? }` |
+| `galyaCreateEntity` | Create / upsert entity or content | `{ content }` or `{ type, name, linked_content? }` — `wait` defaults true |
+| `galyaCreateEntityBatch` | Batch content upsert | `{ content: ContentObject[], ids?, wait? }` |
+| `galyaGetEntityJob` | Poll async job | `{ job_id }` |
+| `galyaGetEntity` | Fetch entity | `{ entity_id }` |
+| `galyaDeleteEntity` | Delete entity | `{ entity_id }` |
+| `galyaLinkEntity` | Link child → parent (mean-pool) | `{ parent_id, entity_id, rel?, weight? }` |
+| `galyaBackfill` | Reindex configured collections | `{ paths?, batchSize?, limitPerCollection? }` |
+
+Client example (Web):
+
+```ts
+import { getFunctions, httpsCallable } from "firebase/functions";
+
+const functions = getFunctions();
+const gauge = httpsCallable(functions, "galyaGauge");
+const { data } = await gauge({
+  response: "Here are three linen shirts…",
+  followup: "Show me something darker",
+  prompt: "Find summer shirts",
+});
+// data.resonance ∈ [0, 1]
+```
+
+Snake_case aliases (`relative_to_entity_id`, `entity_id`, …) are accepted where noted.
+
+---
+
 ## Config reference (`galya.sync.json`)
 
 ```json

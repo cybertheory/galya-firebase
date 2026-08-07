@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 — 2026-08-07
+
+- Callable Galya ops: `galyaGauge`, `galyaSearch`, `galyaRerank`, `galyaRecommend`, `galyaAsk`, `galyaExplain`
+- Entity callables: `galyaCreateEntity`, `galyaCreateEntityBatch`, `galyaGetEntity`, `galyaDeleteEntity`, `galyaLinkEntity`, `galyaGetEntityJob`
+
 ## 1.0.1 — 2026-08-07
 
 - Write Galya `entityId` back onto source Firestore docs (`galyaEntityId` + `galyaSyncedAt` by default)
