@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-08-07
+
+- Expand README + SKILL with full Firebase Secret Manager setup for `GALYA_API_KEY`
+
 ## 1.1.0 — 2026-08-07
 
 - Callable Galya ops: `galyaGauge`, `galyaSearch`, `galyaRerank`, `galyaRecommend`, `galyaAsk`, `galyaExplain`

@@ -29,19 +29,52 @@ cp galya.sync.example.json galya.sync.json
 
 If `functions/` already exists: copy `src/`, merge `package.json` dependencies (`firebase-admin`, `firebase-functions`), and add `galya.sync.json`.
 
-## Secrets
+## Secrets — set Galya API key in Firebase
+
+Code binds `GALYA_API_KEY` with `defineSecret("GALYA_API_KEY")` (`src/params.ts`). Sync triggers + callables declare `secrets: [galyaApiKey]`.
+
+### Production (agent must do this for the user)
 
 ```bash
-# Required
-GALYA_API_KEY=galya_wsk_…   # workspace secret from Galya dashboard
+# From Firebase project root (parent of functions/)
+firebase login
+firebase use <project-id>
 
-# If using account secret galya_sk_…
-GALYA_WORKSPACE_ID=ws_…
+# Paste galya_wsk_… from Galya Dashboard → workspace → API keys → Secret keys
+firebase functions:secrets:set GALYA_API_KEY
 
-# Optional
-GALYA_BASE_URL=https://api.galya.io/v1
-GALYA_SYNC_CONFIG=/absolute/path/to/galya.sync.json
+# Optional string params via functions/.env.<PROJECT_ID> (do not put API key here):
+#   GALYA_WORKSPACE_ID=ws_…     # only for galya_sk_ account secrets
+#   GALYA_BASE_URL=https://api.galya.io/v1
+
+cd functions && npm install && npm run build
+cd .. && firebase deploy --only functions
+# Grant access to secret GALYA_API_KEY when the CLI asks
 ```
+
+Verify:
+
+```bash
+firebase functions:secrets:access GALYA_API_KEY
+```
+
+Rotate: `firebase functions:secrets:set GALYA_API_KEY` then redeploy.
+
+### Local emulator
+
+```bash
+cd functions
+cp .env.example .env   # set GALYA_API_KEY=galya_wsk_…
+export $(grep -v '^#' .env | xargs)
+npm run build
+firebase emulators:start --only functions
+```
+
+### Key rules
+
+- Prefer **`galya_wsk_…`** (workspace secret). Never publishable keys.
+- **`galya_sk_…`** requires `GALYA_WORKSPACE_ID`.
+- Never commit secrets; keep `GALYA_API_KEY` in Secret Manager for prod.
 
 Never invent API shapes — use the in-repo `GalyaClient` (`src/galyaClient.ts`) which matches Galya’s content API (`createEntity`, `createEntityBatch`, `waitForEntityJob`, `deleteEntity`). Optionally swap to `@galya/agents` when you already depend on it.
 

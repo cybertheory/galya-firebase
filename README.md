@@ -46,21 +46,90 @@ cp galya.sync.example.json galya.sync.json
 # Edit collections, fields, domains, and rules
 ```
 
-### 3. Set your Galya secret
+### 3. Set your Galya API key in Firebase
+
+This repo binds `GALYA_API_KEY` via Firebase **Secret Manager** (`defineSecret` in `src/params.ts`). Every sync trigger and Galya callable lists that secret, so Cloud Functions receive it at runtime without putting the key in source.
+
+#### Production (recommended)
+
+1. Create a **workspace secret** in Galya: Dashboard → your workspace → **API keys** → **Secret keys** → copy a `galya_wsk_…` value.  
+   Do **not** use publishable keys (`galya_wpub_` / `galya_pub_`) — they are rejected on API routes.
+
+2. From your **Firebase project root** (the directory with `.firebaserc` / `firebase.json`, usually the parent of `functions/`):
 
 ```bash
+firebase login
+firebase use <your-firebase-project-id>
+
+# Interactive prompt — paste the galya_wsk_… value (not echoed)
 firebase functions:secrets:set GALYA_API_KEY
-# paste galya_wsk_… from Dashboard → workspace → API keys
 ```
 
-Or for local / `.env` (never commit):
+3. Optional non-secret params — create `functions/.env.<PROJECT_ID>` (never commit):
 
 ```bash
-cp .env.example .env
-# GALYA_API_KEY=galya_wsk_…
+# functions/.env.my-prod-project
+GALYA_WORKSPACE_ID=   # leave empty when using galya_wsk_
+GALYA_BASE_URL=https://api.galya.io/v1
 ```
 
-Wire the secret into your deploy (params / `defineSecret`) or export it in the Functions runtime environment. Account keys (`galya_sk_…`) also need `GALYA_WORKSPACE_ID`.
+`GALYA_API_KEY` itself must stay in **Secret Manager** (`functions:secrets:set`), not in `.env` files that might be checked in.
+
+4. Deploy (first deploy after creating the secret will grant the Functions runtime access):
+
+```bash
+cd functions && npm install && npm run build
+cd .. && firebase deploy --only functions
+```
+
+When the CLI asks to grant access to secret `GALYA_API_KEY`, accept.
+
+5. Verify the secret exists:
+
+```bash
+firebase functions:secrets:access GALYA_API_KEY
+# or list:
+firebase functions:secrets:get GALYA_API_KEY
+```
+
+6. Rotate later:
+
+```bash
+firebase functions:secrets:set GALYA_API_KEY   # paste new value
+firebase deploy --only functions               # pick up new version
+```
+
+#### Local emulator
+
+```bash
+cd functions
+cp .env.example .env
+# Edit .env:
+#   GALYA_API_KEY=galya_wsk_…
+#   GALYA_WORKSPACE_ID=          # if using galya_sk_
+#   GALYA_BASE_URL=https://api.galya.io/v1
+
+# Secret Manager is not used the same way in emulators — export before serve:
+export $(grep -v '^#' .env | xargs)
+npm run build
+firebase emulators:start --only functions
+```
+
+#### Account secret vs workspace secret
+
+| Key | Header | Extra |
+|-----|--------|--------|
+| `galya_wsk_…` (preferred) | `X-API-Key` | Workspace is implied by the key |
+| `galya_sk_…` | `X-API-Key` | Also set `GALYA_WORKSPACE_ID` (workspace `publicId`) |
+
+#### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `GALYA_API_KEY is required` | Secret not set or function not redeployed after `secrets:set` |
+| `permission-denied` / 401 from Galya | Wrong key type (publishable) or revoked key |
+| Deploy asks about secrets | Choose to grant `GALYA_API_KEY` to the new/updated functions |
+| Emulator works, prod fails | Prod uses Secret Manager only — confirm `firebase functions:secrets:access GALYA_API_KEY` |
 
 ### 4. Deploy
 
@@ -225,6 +294,7 @@ Write-back-only updates are ignored so the sync does not loop. Prefer **stable p
 ## Security & billing
 
 - **Never commit** `GALYA_API_KEY` or publishable keys to git.
+- Store production keys with **`firebase functions:secrets:set GALYA_API_KEY`** (Secret Manager), not in `galya.sync.json` or committed `.env`.
 - Use a **workspace secret** (`galya_wsk_…`) scoped to the target workspace.
 - Firebase requires the **Blaze** plan for outbound Galya API calls from Cloud Functions.
 - Galya usage follows your workspace plan (indexing + embeddings).
